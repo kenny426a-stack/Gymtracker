@@ -1,0 +1,5 @@
+{
+  "name": "GymTracker Pro ",
+  "description": "一個為廣東話用戶設計的純黑風格健身追蹤器。具備胸、背、腿循環提醒功能，並包含月曆統計與 AI 健身分析。",
+  "requestFramePermissions": []
+}
