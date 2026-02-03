@@ -1,47 +1,41 @@
-import { GoogleGenerativeAI } from "@google/generative-ai"; // 改用呢個更穩定的 library
+// services/geminiService.ts
+import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 留意呢度轉咗名
 import { Workout } from "../types";
 
-// 1. 取得 API Key
+// 讀取 Vercel 環境變數
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-
-// 2. 初始化 (搬入 function 或加 null check 避免初始化失敗)
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 export const getWorkoutAnalysis = async (history: Workout[]) => {
-  if (!genAI) return "API Key 設定中，請稍後...";
+  if (!genAI) return "API Key 未設定，請檢查環境變數。";
 
   try {
-    // 3. 修正 Model 名稱為穩定版
+    // 免費版請務必用 gemini-1.5-flash，速度快且穩定
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const prompt = `
-      以下是用戶最近的健身紀錄：
-      ${JSON.stringify(history.slice(-5))}
-      根據這些紀錄，請提供一句簡短且具激勵性的廣東話健身建議（約30字以內）。
-    `;
+    const prompt = `你是一個健身教練，請用廣東話分析以下最近紀錄並給予一句 30 字內的鼓勵：${JSON.stringify(history.slice(-5))}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text() || "加油，今日都要爆汗！";
+    return response.text();
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "保持規律，進步就在眼前！";
+    return "加油！保持訓練呀！";
   }
 };
 
 export const getDetailedProgressAnalysis = async (history: Workout[]) => {
-  if (!genAI) return "分析過程中出現錯誤，請檢查 API 設定。";
+  if (!genAI) return "分析失敗，API Key 缺失。";
 
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `你是專業健身教練。請分析以下數據並以廣東話提供詳細 Markdown 建議：${JSON.stringify(history)}`;
+    const prompt = `你是專業教練，請用廣東話詳細分析這些數據並以 Markdown 列表回覆：${JSON.stringify(history)}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    return response.text() || "暫時未有足夠數據進行詳細分析。";
+    return response.text();
   } catch (error) {
-    console.error("Advanced Gemini Error:", error);
+    console.error("Advanced Error:", error);
     return "分析過程中出現錯誤，請稍後再試。";
   }
 };
