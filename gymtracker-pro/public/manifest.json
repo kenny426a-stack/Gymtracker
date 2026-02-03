@@ -6,7 +6,7 @@
   "orientation": "any",
   "scope": "/",
   "short_name": "gymtracker-sv1m.vercel",
-  "start_url": "https://gymtracker-sv1m.vercel.app/",
+  "start_url": "/",
   "theme_color": "#ffffff",
   "icons": [
     {
