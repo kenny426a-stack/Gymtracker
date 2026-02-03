@@ -1,11 +1,17 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Workout } from "../types";
 
-// Always use process.env.API_KEY directly for initialization as per @google/genai guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// ✅ 1. 修正變數讀取方式：Vite 環境下必須使用 import.meta.env
+// ✅ 2. 確保變數名同 Vercel 入面加嘅 VITE_GEMINI_API_KEY 一致
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+
+// 初始化 ai 物件
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 export const getWorkoutAnalysis = async (history: Workout[]) => {
+  // 如果無 Key，直接 return 預設句子，唔好 call API 費事報錯
+  if (!API_KEY) return "保持規律，進步就在眼前！";
+
   try {
     const prompt = `
       以下是用戶最近的健身紀錄：
@@ -17,7 +23,8 @@ export const getWorkoutAnalysis = async (history: Workout[]) => {
     `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      // ✅ 3. 修正 Model 名稱：免費版通常用 gemini-1.5-flash
+      model: 'gemini-1.5-flash', 
       contents: prompt,
     });
 
@@ -29,6 +36,8 @@ export const getWorkoutAnalysis = async (history: Workout[]) => {
 };
 
 export const getDetailedProgressAnalysis = async (history: Workout[]) => {
+  if (!API_KEY) return "分析過程中出現錯誤，請檢查 API 設定。";
+
   try {
     const prompt = `
       你是專業的健身教練。請分析以下用戶的健身歷史數據：
@@ -43,7 +52,8 @@ export const getDetailedProgressAnalysis = async (history: Workout[]) => {
     `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      // ✅ 4. 修正 Model 名稱：免費版建議用 gemini-1.5-flash 或 gemini-1.5-pro
+      model: 'gemini-1.5-flash',
       contents: prompt,
     });
 
