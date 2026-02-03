@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { MuscleGroup, Workout, TRAINING_ORDER } from './types';
 import { getStoredWorkouts, saveWorkout, deleteWorkout } from './services/storage';
@@ -6,30 +5,20 @@ import { getWorkoutAnalysis } from './services/geminiService';
 import WorkoutForm from './components/WorkoutForm';
 import WorkoutCalendar from './components/WorkoutCalendar';
 import AnalysisView from './components/AnalysisView';
-import { Dumbbell, History, TrendingUp, Calendar as CalendarIcon, PlusCircle, Trash2, BarChart3 } from 'lucide-react';
+import DataView from './components/DataView';
+import { Dumbbell, History, TrendingUp, Calendar as CalendarIcon, PlusCircle, Trash2, BarChart3, Clock, Database } from 'lucide-react';
 
 const App: React.FC = () => {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [aiAnalysis, setAiAnalysis] = useState("正在生成今日健身語錄...");
-  const [activeTab, setActiveTab] = useState<'dash' | 'calendar' | 'history' | 'analysis'>('dash');
+  const [activeTab, setActiveTab] = useState<'dash' | 'calendar' | 'history' | 'analysis' | 'data'>('dash');
 
   useEffect(() => {
     const data = getStoredWorkouts();
     setWorkouts(data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
   }, []);
 
-  useEffect(() => {
-    const fetchAnalysis = async () => {
-      if (workouts.length > 0) {
-        const text = await getWorkoutAnalysis(workouts);
-        setAiAnalysis(text);
-      } else {
-        setAiAnalysis("準備好開始你嘅第一場訓練未？");
-      }
-    };
-    fetchAnalysis();
-  }, [workouts]);
+  const lastWorkout = useMemo(() => workouts[0] || null, [workouts]);
 
   const nextMuscleGroup = useMemo(() => {
     if (workouts.length === 0) return MuscleGroup.CHEST;
@@ -49,10 +38,26 @@ const App: React.FC = () => {
     setActiveTab('dash');
   };
 
+  const handleImportWorkouts = (importedWorkouts: Workout[]) => {
+    // Basic merge strategy: check if ID already exists, if not, add it
+    const existingIds = new Set(workouts.map(w => w.id));
+    const newWorkouts = [...workouts];
+    
+    importedWorkouts.forEach(w => {
+      if (!existingIds.has(w.id)) {
+        newWorkouts.push(w);
+      }
+    });
+
+    localStorage.setItem('gym_tracker_data_v1', JSON.stringify(newWorkouts));
+    setWorkouts(newWorkouts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  };
+
   const handleDelete = (id: string) => {
     if (confirm("確定要刪除此訓練紀錄？")) {
       deleteWorkout(id);
-      setWorkouts(getStoredWorkouts().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+      const updatedData = getStoredWorkouts();
+      setWorkouts(updatedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     }
   };
 
@@ -68,12 +73,22 @@ const App: React.FC = () => {
     <div className="max-w-md mx-auto min-h-screen flex flex-col px-4 pt-8 pb-32">
       {/* Header */}
       <header className="mb-8">
-        <h1 className="text-3xl font-black italic tracking-tighter mb-2">GYMTRACKER PRO</h1>
         <div className="bg-zinc-900/50 rounded-2xl p-4 border border-zinc-800">
-          <p className="text-zinc-400 text-sm mb-1 font-medium flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-blue-500" /> AI 語錄
+          <p className="text-zinc-500 text-xs mb-1 font-bold flex items-center gap-2 uppercase tracking-widest">
+            <Clock className="w-3.5 h-3.5 text-zinc-400" /> 上次訓練
           </p>
-          <p className="text-sm font-semibold text-white">"{aiAnalysis}"</p>
+          {lastWorkout ? (
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">
+                {new Date(lastWorkout.date).toLocaleDateString('zh-HK', { month: 'short', day: 'numeric' })} · {lastWorkout.muscleGroup}部
+              </p>
+              <span className="text-[10px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full font-medium">
+                已記錄
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm font-semibold text-zinc-500 italic">尚未有訓練紀錄</p>
+          )}
         </div>
       </header>
 
@@ -81,9 +96,8 @@ const App: React.FC = () => {
       {!showForm && activeTab === 'dash' && (
         <div className="mb-8">
           <div className="bg-white text-black p-6 rounded-3xl shadow-2xl relative overflow-hidden">
-            {/* Dumbbell logo removed as requested for a cleaner UI */}
             <p className="text-sm font-bold opacity-60 mb-1">今日訓練目標</p>
-            <h2 className="text-4xl font-black mb-4">{nextMuscleGroup} 部位</h2>
+            <h2 className="text-4xl font-black mb-4">{nextMuscleGroup}</h2>
             <p className="text-xs font-medium bg-black/5 inline-block px-2 py-1 rounded">次序：胸 → 背 → 腿</p>
             
             <button 
@@ -96,11 +110,11 @@ const App: React.FC = () => {
           
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl">
-              <p className="text-zinc-500 text-xs font-bold mb-1">本月訓練次數</p>
+              <p className="text-zinc-500 text-xs font-bold mb-1 uppercase tracking-wider">本月次數</p>
               <p className="text-2xl font-black">{totalWorkoutsMonth}</p>
             </div>
             <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl">
-              <p className="text-zinc-500 text-xs font-bold mb-1">總訓練次數</p>
+              <p className="text-zinc-500 text-xs font-bold mb-1 uppercase tracking-wider">總次數</p>
               <p className="text-2xl font-black">{workouts.length}</p>
             </div>
           </div>
@@ -168,6 +182,10 @@ const App: React.FC = () => {
             {activeTab === 'analysis' && (
               <AnalysisView workouts={workouts} />
             )}
+
+            {activeTab === 'data' && (
+              <DataView workouts={workouts} onImport={handleImportWorkouts} />
+            )}
             
             {activeTab === 'dash' && (
               <div className="mt-4">
@@ -187,13 +205,22 @@ const App: React.FC = () => {
                     </div>
                  ))}
                  
-                 <button 
-                  onClick={() => setActiveTab('analysis')}
-                  className="w-full mt-4 bg-zinc-900 border border-zinc-800 py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-zinc-800 transition group"
-                 >
-                   <BarChart3 className="w-5 h-5 text-blue-500 group-hover:scale-110 transition" />
-                   <span className="font-bold text-zinc-300">查看深度進度分析</span>
-                 </button>
+                 <div className="flex flex-col gap-3 mt-4">
+                  <button 
+                    onClick={() => setActiveTab('analysis')}
+                    className="w-full bg-zinc-900 border border-zinc-800 py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-zinc-800 transition group"
+                  >
+                    <BarChart3 className="w-5 h-5 text-blue-500 group-hover:scale-110 transition" />
+                    <span className="font-bold text-zinc-300">查看深度進度分析</span>
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('data')}
+                    className="w-full bg-zinc-900 border border-zinc-800 py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-zinc-800 transition group"
+                  >
+                    <Database className="w-5 h-5 text-zinc-400 group-hover:scale-110 transition" />
+                    <span className="font-bold text-zinc-500">數據匯入與匯出</span>
+                  </button>
+                 </div>
               </div>
             )}
           </>
@@ -202,34 +229,41 @@ const App: React.FC = () => {
 
       {/* Bottom Tab Bar */}
       {!showForm && (
-        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[94%] max-w-md bg-black/80 backdrop-blur-xl border border-zinc-800 rounded-3xl h-20 flex items-center justify-around px-2 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.5)] z-50">
+        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[94%] max-w-md bg-black/80 backdrop-blur-xl border border-zinc-800 rounded-3xl h-20 flex items-center justify-around px-1 shadow-[0_-20px_40px_-15px_rgba(0,0,0,0.5)] z-50">
           <button 
             onClick={() => setActiveTab('dash')}
             className={`flex flex-col items-center gap-1.5 flex-1 transition-all ${activeTab === 'dash' ? 'text-white scale-110' : 'text-zinc-600'}`}
           >
-            <Dumbbell className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">訓練</span>
+            <Dumbbell className="w-5 h-5" />
+            <span className="text-[9px] font-bold uppercase tracking-widest">訓練</span>
           </button>
           <button 
             onClick={() => setActiveTab('calendar')}
             className={`flex flex-col items-center gap-1.5 flex-1 transition-all ${activeTab === 'calendar' ? 'text-white scale-110' : 'text-zinc-600'}`}
           >
-            <CalendarIcon className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">月曆</span>
+            <CalendarIcon className="w-5 h-5" />
+            <span className="text-[9px] font-bold uppercase tracking-widest">月曆</span>
           </button>
           <button 
             onClick={() => setActiveTab('analysis')}
             className={`flex flex-col items-center gap-1.5 flex-1 transition-all ${activeTab === 'analysis' ? 'text-white scale-110' : 'text-zinc-600'}`}
           >
-            <BarChart3 className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">分析</span>
+            <BarChart3 className="w-5 h-5" />
+            <span className="text-[9px] font-bold uppercase tracking-widest">分析</span>
           </button>
           <button 
             onClick={() => setActiveTab('history')}
             className={`flex flex-col items-center gap-1.5 flex-1 transition-all ${activeTab === 'history' ? 'text-white scale-110' : 'text-zinc-600'}`}
           >
-            <History className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">歷史</span>
+            <History className="w-5 h-5" />
+            <span className="text-[9px] font-bold uppercase tracking-widest">歷史</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('data')}
+            className={`flex flex-col items-center gap-1.5 flex-1 transition-all ${activeTab === 'data' ? 'text-white scale-110' : 'text-zinc-600'}`}
+          >
+            <Database className="w-5 h-5" />
+            <span className="text-[9px] font-bold uppercase tracking-widest">數據</span>
           </button>
         </nav>
       )}

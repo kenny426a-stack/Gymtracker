@@ -2,7 +2,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { Workout } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Always use process.env.API_KEY directly for initialization as per @google/genai guidelines
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getWorkoutAnalysis = async (history: Workout[]) => {
   try {

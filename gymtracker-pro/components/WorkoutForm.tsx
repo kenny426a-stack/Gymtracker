@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MuscleGroup, Workout, Exercise, SetEntry } from '../types';
-import { Plus, Trash2, Save, X, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Save, X, RotateCcw, Info, History } from 'lucide-react';
 
 interface WorkoutFormProps {
   suggestedMuscle: MuscleGroup;
@@ -14,19 +14,22 @@ const WorkoutForm: React.FC<WorkoutFormProps> = ({ suggestedMuscle, history, onS
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>(suggestedMuscle);
   const [exercises, setExercises] = useState<Exercise[]>([]);
 
+  // Find the last workout of the same muscle group for reference
+  const lastMatchingWorkout = useMemo(() => {
+    return history.find(w => w.muscleGroup === muscleGroup);
+  }, [muscleGroup, history]);
+
   // Memory feature: When muscleGroup changes, find the last workout of that type
   useEffect(() => {
-    const lastMatchingWorkout = history.find(w => w.muscleGroup === muscleGroup);
     if (lastMatchingWorkout && exercises.length === 0) {
       const templateExercises: Exercise[] = lastMatchingWorkout.exercises.map(ex => ({
         id: crypto.randomUUID(),
         name: ex.name,
-        // We populate with the same number of sets, but reset weight/reps to placeholders or defaults
-        // Or keep reps from last time as a target
-        sets: ex.sets.map(s => ({
+        // Populate with the same number of sets, but reset weight and reps to 0 as requested
+        sets: ex.sets.map(() => ({
           id: crypto.randomUUID(),
-          reps: s.reps,
-          weight: 0 // Reset weight so user has to enter it, or keep it as 0 to avoid false data
+          reps: 0,
+          weight: 0
         }))
       }));
       setExercises(templateExercises);
@@ -40,7 +43,7 @@ const WorkoutForm: React.FC<WorkoutFormProps> = ({ suggestedMuscle, history, onS
     const newEx: Exercise = {
       id: crypto.randomUUID(),
       name: '',
-      sets: [{ id: crypto.randomUUID(), reps: 10, weight: 0 }]
+      sets: [{ id: crypto.randomUUID(), reps: 0, weight: 0 }]
     };
     setExercises([...exercises, newEx]);
   };
@@ -54,7 +57,7 @@ const WorkoutForm: React.FC<WorkoutFormProps> = ({ suggestedMuscle, history, onS
       if (ex.id === exId) {
         return {
           ...ex,
-          sets: [...ex.sets, { id: crypto.randomUUID(), reps: 10, weight: 0 }]
+          sets: [...ex.sets, { id: crypto.randomUUID(), reps: 0, weight: 0 }]
         };
       }
       return ex;
@@ -203,7 +206,7 @@ const WorkoutForm: React.FC<WorkoutFormProps> = ({ suggestedMuscle, history, onS
                           type="number"
                           className="w-full bg-transparent p-1 focus:outline-none text-center"
                           value={set.reps || ''}
-                          placeholder="10"
+                          placeholder="0"
                           onChange={(e) => updateSet(ex.id, set.id, 'reps', parseInt(e.target.value) || 0)}
                         />
                         <span className="text-zinc-600 px-1">次</span>
@@ -222,9 +225,33 @@ const WorkoutForm: React.FC<WorkoutFormProps> = ({ suggestedMuscle, history, onS
           ))}
         </div>
 
+        {/* Reference section for last workout */}
+        {lastMatchingWorkout && (
+          <div className="mt-8 pt-6 border-t border-zinc-800">
+            <div className="flex items-center gap-2 mb-4 text-zinc-400">
+              <History className="w-4 h-4" />
+              <h3 className="text-xs font-bold uppercase tracking-widest">上次訓練參考 ({new Date(lastMatchingWorkout.date).toLocaleDateString('zh-HK')})</h3>
+            </div>
+            <div className="space-y-3 bg-zinc-900/30 rounded-xl p-4 border border-zinc-800/50">
+              {lastMatchingWorkout.exercises.map((ex, idx) => (
+                <div key={ex.id} className="text-xs">
+                  <p className="font-bold text-zinc-300 mb-1">{ex.name}</p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {ex.sets.map((s, sIdx) => (
+                      <span key={s.id} className="text-zinc-500">
+                        組{sIdx + 1}: <span className="text-zinc-400">{s.weight}kg x {s.reps}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <button
           onClick={handleSave}
-          className="w-full py-4 bg-white text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-200 transition"
+          className="w-full py-4 bg-white text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-zinc-200 transition sticky bottom-0 shadow-2xl"
         >
           <Save className="w-5 h-5" /> 儲存訓練
         </button>
