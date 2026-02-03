@@ -1,0 +1,18 @@
+{
+  "background_color": "#ffffff",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "gymtracker-sv1m.vercel",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "gymtracker-sv1m.vercel",
+  "start_url": "https://gymtracker-sv1m.vercel.app/",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/R.png",
+      "sizes": "192x192", // 確保 R.png 最好係呢個尺寸
+      "type": "image/png"
+    }
+  ]
+}
