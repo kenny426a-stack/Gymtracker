@@ -46,5 +46,10 @@
 <body class="bg-black text-white antialiased">
     <div id="root"></div>
 <script type="module" src="/index.tsx"></script>
+<script>
+  if (typeof navigator.serviceWorker !== 'undefined') {
+    navigator.serviceWorker.register('sw.js')
+  }
+</script>
 </body>
 </html>
