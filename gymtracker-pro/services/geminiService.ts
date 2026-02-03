@@ -1,41 +1,62 @@
-// services/geminiService.ts
-import { GoogleGenerativeAI } from "@google/generative-ai"; // 👈 留意呢度轉咗名
+
+import { GoogleGenAI } from "@google/genai";
 import { Workout } from "../types";
 
-// 讀取 Vercel 環境變數
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
+// Always use process.env.API_KEY directly for initialization as per @google/genai guidelines
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getWorkoutAnalysis = async (history: Workout[]) => {
-  if (!genAI) return "API Key 未設定，請檢查環境變數。";
-
   try {
-    // 免費版請務必用 gemini-1.5-flash，速度快且穩定
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const prompt = `
+      以下是用戶最近的健身紀錄：
+      ${JSON.stringify(history.slice(-5))}
 
-    const prompt = `你是一個健身教練，請用廣東話分析以下最近紀錄並給予一句 30 字內的鼓勵：${JSON.stringify(history.slice(-5))}`;
+      根據這些紀錄，請提供一句簡短且具激勵性的廣東話健身建議（約30字以內）。
+      用戶目前的訓練次序是：胸、背、腿。
+      如果用戶有進步，請給予肯定。
+    `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+    });
+
+    return response.text || "加油，今日都要爆汗！";
+  } catch (error: any) {
+    if (error?.message?.includes('429') || error?.message?.includes('quota')) {
+      return "教練休息緊，聽日再比建議你！";
+    }
     console.error("Gemini Error:", error);
-    return "加油！保持訓練呀！";
+    return "保持規律，進步就在眼前！";
   }
 };
 
 export const getDetailedProgressAnalysis = async (history: Workout[]) => {
-  if (!genAI) return "分析失敗，API Key 缺失。";
-
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `你是專業教練，請用廣東話詳細分析這些數據並以 Markdown 列表回覆：${JSON.stringify(history)}`;
+    const prompt = `
+      你是專業的健身教練。請分析以下用戶的健身歷史數據：
+      ${JSON.stringify(history)}
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error("Advanced Error:", error);
-    return "分析過程中出現錯誤，請稍後再試。";
+      要求：
+      1. 分析重量變化趨勢。
+      2. 分析總訓練容量 (Volume = Weight * Reps) 的進度。
+      3. 給予專業且詳細的廣東話建議，指出哪些動作有進步，哪些需要加強。
+      4. 格式：請以 Markdown 列表形式回覆，保持語氣專業且富有鼓勵性。
+      5. 使用廣東話口語（例如：仲可以加重、做得好、爆肌）。
+    `;
+
+    // Using gemini-3-flash-preview instead of pro to avoid 429 quota issues
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+    });
+
+    return response.text || "暫時未有足夠數據進行詳細分析。";
+  } catch (error: any) {
+    console.error("Detailed Gemini Error:", error);
+    if (error?.message?.includes('429') || error?.message?.includes('quota')) {
+      throw new Error("QUOTA_EXHAUSTED");
+    }
+    throw error;
   }
 };

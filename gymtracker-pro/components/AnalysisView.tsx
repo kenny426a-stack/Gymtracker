@@ -16,6 +16,7 @@ interface AnalysisCache {
 }
 
 const CACHE_KEY = 'gym_tracker_analysis_cache';
+const CACHE_EXPIRY = 30 * 60 * 1000; // 30 minutes cache
 
 type MetricType = 'weight' | 'volume';
 
@@ -51,7 +52,6 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
       groups[w.muscleGroup].push({ date: new Date(w.date), weight: maxWeight, volume });
     });
 
-    // Get max value for Y scaling based on selected metric
     let maxValue = 0;
     Object.values(groups).forEach(g => {
       g.forEach(d => { 
@@ -60,7 +60,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
       });
     });
 
-    return { groups, maxValue: maxValue * 1.2 }; // 20% padding
+    return { groups, maxValue: maxValue * 1.2 }; 
   }, [workouts, metric]);
 
   const stats = useMemo(() => {
@@ -94,10 +94,14 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
 
     const cached = localStorage.getItem(CACHE_KEY);
     const lastWorkoutId = workouts[0]?.id || null;
+    const now = Date.now();
     
     if (!force && cached) {
       const cacheData: AnalysisCache = JSON.parse(cached);
-      if (cacheData.workoutCount === workouts.length && cacheData.lastWorkoutId === lastWorkoutId) {
+      const isFresh = (now - cacheData.timestamp) < CACHE_EXPIRY;
+      const isSameData = cacheData.workoutCount === workouts.length && cacheData.lastWorkoutId === lastWorkoutId;
+      
+      if (isSameData && isFresh) {
         setAnalysisText(cacheData.text);
         setLastUpdated(cacheData.timestamp);
         return;
@@ -108,12 +112,9 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
     setError(null);
     try {
       const text = await getDetailedProgressAnalysis(workouts);
-      if (text.includes("RESOURCE_EXHAUSTED") || text.includes("quota")) {
-        throw new Error("API 配額已用完，請稍後再試。");
-      }
       setAnalysisText(text);
-      const now = Date.now();
       setLastUpdated(now);
+      
       const newCache: AnalysisCache = {
         workoutCount: workouts.length,
         lastWorkoutId: lastWorkoutId,
@@ -122,7 +123,11 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
       };
       localStorage.setItem(CACHE_KEY, JSON.stringify(newCache));
     } catch (err: any) {
-      setError(err.message || "分析過程中出現錯誤。");
+      if (err.message === "QUOTA_EXHAUSTED") {
+        setError("教練依家好忙（API 配額已滿），請等 1-2 分鐘再試。");
+      } else {
+        setError("分析過程中出現錯誤，請檢查網路連線。");
+      }
     } finally {
       setLoading(false);
     }
@@ -132,7 +137,6 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
     fetchAnalysis();
   }, [workouts]);
 
-  // Chart Component Render Helper
   const renderLineChart = () => {
     if (!chartData) return (
       <div className="h-48 flex items-center justify-center text-zinc-600 text-xs italic border border-dashed border-zinc-800 rounded-2xl">
@@ -153,11 +157,9 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
     return (
       <div className="relative mt-2">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
-          {/* X & Y Axis */}
           <line x1={paddingLeft} y1={height - paddingBottom} x2={width - paddingRight} y2={height - paddingBottom} stroke="#27272a" strokeWidth="1" />
           <line x1={paddingLeft} y1={paddingTop} x2={paddingLeft} y2={height - paddingBottom} stroke="#27272a" strokeWidth="1" />
           
-          {/* Y Axis Labels (Value) */}
           {[0, 0.5, 1].map((tick) => {
             const val = Math.round(chartData.maxValue * tick);
             const yPos = getY(val);
@@ -171,10 +173,8 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
             );
           })}
 
-          {/* Render Lines */}
           {Object.entries(chartData.groups).map(([muscle, data]) => {
             if (data.length < 1) return null;
-            
             const color = muscle === MuscleGroup.CHEST ? '#3b82f6' : muscle === MuscleGroup.BACK ? '#10b981' : '#a855f7';
             const points = data.map((d, i) => {
               const val = metric === 'weight' ? d.weight : d.volume;
@@ -183,14 +183,12 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
             
             return (
               <g key={muscle}>
-                {/* Area fill */}
                 <polyline
                   points={`${getX(0, data.length)},${height - paddingBottom} ${points} ${getX(data.length - 1, data.length)},${height - paddingBottom}`}
                   fill={color}
                   fillOpacity="0.05"
                   stroke="none"
                 />
-                {/* Main line */}
                 <polyline
                   points={points}
                   fill="none"
@@ -200,24 +198,16 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
                   strokeLinejoin="round"
                   className="drop-shadow-sm transition-all duration-500"
                 />
-                {/* Dots & Date Labels */}
                 {data.map((d, i) => {
                   const val = metric === 'weight' ? d.weight : d.volume;
                   const x = getX(i, data.length);
                   const y = getY(val);
                   const dateStr = `${d.date.getMonth() + 1}/${d.date.getDate()}`;
-                  
                   return (
                     <g key={i}>
                       <circle cx={x} cy={y} r="3" fill="#000" stroke={color} strokeWidth="1.5" />
-                      {/* Date label - show for first, last, and every 2nd if many */}
                       {(i === 0 || i === data.length - 1 || data.length < 6) && (
-                        <text 
-                          x={x} 
-                          y={height - paddingBottom + 18} 
-                          textAnchor="middle" 
-                          className="fill-zinc-500 text-[9px] font-bold"
-                        >
+                        <text x={x} y={height - paddingBottom + 18} textAnchor="middle" className="fill-zinc-500 text-[9px] font-bold">
                           {dateStr}
                         </text>
                       )}
@@ -228,13 +218,10 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
             );
           })}
         </svg>
-        
         <div className="flex justify-between mt-6 px-2">
           {Object.values(MuscleGroup).map(m => (
             <div key={m} className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${
-                m === MuscleGroup.CHEST ? 'bg-blue-500' : m === MuscleGroup.BACK ? 'bg-emerald-500' : 'bg-purple-500'
-              }`}></div>
+              <div className={`w-2 h-2 rounded-full ${m === MuscleGroup.CHEST ? 'bg-blue-500' : m === MuscleGroup.BACK ? 'bg-emerald-500' : 'bg-purple-500'}`}></div>
               <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-tighter">
                 {m}部{metric === 'weight' ? '最高重量' : '總容量'}
               </span>
@@ -256,31 +243,17 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300 pb-10">
-      {/* Chart Section */}
       <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <ChartIcon className="w-5 h-5 text-zinc-400" />
             <h3 className="font-bold text-lg">進度趨勢圖表</h3>
           </div>
-          
-          {/* Metric Toggle */}
           <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800">
-            <button 
-              onClick={() => setMetric('weight')}
-              className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${metric === 'weight' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500'}`}
-            >
-              重量
-            </button>
-            <button 
-              onClick={() => setMetric('volume')}
-              className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${metric === 'volume' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500'}`}
-            >
-              容量
-            </button>
+            <button onClick={() => setMetric('weight')} className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${metric === 'weight' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500'}`}>重量</button>
+            <button onClick={() => setMetric('volume')} className={`px-3 py-1 text-[10px] font-bold rounded-lg transition-all ${metric === 'volume' ? 'bg-zinc-800 text-white shadow-sm' : 'text-zinc-500'}`}>容量</button>
           </div>
         </div>
-        
         {renderLineChart()}
       </div>
 
@@ -303,11 +276,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
             <TrendingUp className="w-5 h-5 text-emerald-500" />
             <h3 className="font-bold text-lg">深度進度分析</h3>
           </div>
-          <button 
-            onClick={() => fetchAnalysis(true)} 
-            disabled={loading}
-            className="p-2 hover:bg-zinc-900 rounded-full transition text-zinc-500 hover:text-white disabled:opacity-50"
-          >
+          <button onClick={() => fetchAnalysis(true)} disabled={loading} className="p-2 hover:bg-zinc-900 rounded-full transition text-zinc-500 hover:text-white disabled:opacity-50">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
@@ -316,9 +285,9 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
           <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 flex items-start gap-3 text-red-400">
             <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
             <div>
-              <p className="text-sm font-bold">分析失敗</p>
+              <p className="text-sm font-bold">教練休息中</p>
               <p className="text-xs opacity-80">{error}</p>
-              <button onClick={() => fetchAnalysis(true)} className="mt-2 text-xs font-bold underline">重試</button>
+              <button onClick={() => fetchAnalysis(true)} className="mt-2 text-xs font-bold underline">即刻重試</button>
             </div>
           </div>
         ) : loading ? (
@@ -332,17 +301,10 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ workouts }) => {
               {analysisText}
             </div>
             {lastUpdated && (
-              <p className="text-[10px] text-zinc-600 text-right italic">
-                最後更新: {new Date(lastUpdated).toLocaleTimeString('zh-HK')}
-              </p>
+              <p className="text-[10px] text-zinc-600 text-right italic">最後更新: {new Date(lastUpdated).toLocaleTimeString('zh-HK')}</p>
             )}
           </div>
         )}
-      </div>
-
-      <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl">
-        <p className="text-xs font-bold text-blue-400 mb-1 uppercase tracking-wider">教練建議</p>
-        <p className="text-sm text-blue-100">持續維持「胸、背、腿」循環。點擊上方切換「重量」可追蹤純力量增長。</p>
       </div>
     </div>
   );
